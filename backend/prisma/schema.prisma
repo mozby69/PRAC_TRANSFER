@@ -1,0 +1,395 @@
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db{
+    provider = "postgresql"
+    url = env("DATABASE_URL")
+}
+
+enum Role {
+  Admin
+  User
+  Branch
+  Coordinator
+  Superadmin
+}
+
+enum Statuses {
+  PENDING
+  INPROGRESS
+  CANCEL
+  APPROVED
+  REJECTED
+  EMPTY
+}
+
+model User {
+  id         Int      @id @default(autoincrement())
+  name       String
+  email      String   @unique
+  username   String   @unique
+  password   String
+  role       Role     @default(User)
+  branchId   Int?     @map("branch_id")
+  branch     Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  signatureUrl String?
+  position String?
+  initial String?
+  approver Boolean @default(false)
+
+  createdAt  DateTime @default(now()) @map("created_at")
+  updateAt   DateTime @updatedAt      @map("update_at")
+
+  // relations
+  notedByForTypes        RequestType[] @relation("noteBy")
+  checkedByForTypes      RequestType[] @relation("checkedBy")
+  checkedBy2ForTypes     RequestType[] @relation("checkedBy2")
+  recomApprovalForTypes  RequestType[] @relation("recomApproval")
+  recomApproval2ForTypes RequestType[] @relation("recomApproval2")
+  approveByForTypes      RequestType[] @relation("approveBy1")
+
+  //Form
+  formRequestFundTo FormFundTransfer[]
+  formRequestTransmittalTo formTransmittalMemo[]
+  formRequestDisburseTo formDisburse[]
+
+
+  requestLogs      RequestLogs[]
+  mainForm    MainRequest[]
+
+
+  
+
+  @@index([branchId])
+  @@map("users")
+}
+
+model Branch {
+  id         Int      @id @default(autoincrement())
+  branchCode String   @unique
+  branchName String
+  bom        String
+  faa        String
+  telephone String
+  address String
+  companyName String
+  createdAt  DateTime @default(now()) @map("created_at")
+  updateAt   DateTime @updatedAt      @map("update_at")
+  users      User[]
+  main      MainRequest[]
+
+  @@map("branches")
+}
+
+model RequestType {
+  id               Int    @id @default(autoincrement())
+  requestName      String @unique
+
+  // FK scalar fields
+  notedById        Int?
+  checkedById      Int?
+  checkedBy2Id     Int?
+  recomApprovalId  Int?
+  recomApproval2Id Int?
+  approveById      Int?
+
+  // Relation fields (named because they all point to RequestChecker)
+
+  notedBy        User? @relation("noteBy", fields: [notedById],        references: [id], onDelete: SetNull)
+  checkedBy      User? @relation("checkedBy",  fields: [checkedById],      references: [id], onDelete: SetNull)
+  checkedBy2     User? @relation("checkedBy2",  fields: [checkedBy2Id],     references: [id], onDelete: SetNull)
+  recomApproval  User? @relation("recomApproval",  fields: [recomApprovalId],  references: [id], onDelete: SetNull)
+  recomApproval2 User? @relation("recomApproval2",  fields: [recomApproval2Id], references: [id], onDelete: SetNull)
+  approveBy      User? @relation("approveBy1",  fields: [approveById],      references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updateAt  DateTime @updatedAt
+
+
+  mainRequests  MainRequest[] @relation("MainRequest_RequestType")
+
+  @@map("request_types")
+  // (optional) add indexes to speed up joins/lookups:
+  @@index([notedById])
+  @@index([checkedById])
+  @@index([checkedBy2Id])
+  @@index([recomApprovalId])
+  @@index([recomApproval2Id])
+  @@index([approveById])
+}
+
+// model RequestChecker {
+//   id        Int    @id @default(autoincrement())
+//   userId   Int? @unique    @map("user_id")
+//   checkerName     User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+//   position  String
+//   initial   String
+//   createdAt DateTime @default(now())
+//   updatedAt DateTime @updatedAt
+
+//   notedByForTypes        RequestType[] @relation("NotedBy")
+//   checkedByForTypes      RequestType[] @relation("CheckedBy")
+//   checkedBy2ForTypes     RequestType[] @relation("CheckedBy2")
+//   recomApprovalForTypes  RequestType[] @relation("RecomApproval")
+//   recomApproval2ForTypes RequestType[] @relation("RecomApproval2")
+//   approveByForTypes      RequestType[] @relation("ApproveBy")
+
+
+//   formRequestFundTo FormFundTransfer[] @relation("FormFund_RequestCheckerTo")
+
+//   requestLogs      RequestLogs[]
+
+//   @@index([userId])
+
+//   @@map("request_checker")
+// }
+
+model MainRequest {
+  id             Int          @id @default(autoincrement())
+  referenceCode String @unique @map("reference_code")
+  requestTypeId  Int?         @map("request_type_id")
+  requestById Int? @map("request_by_id")
+  requestFromId Int? @map("requestFrom")
+  status Statuses @default(PENDING)
+  requestDate DateTime @map("request_date")
+  remarks String?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updateAt   DateTime @updatedAt      @map("update_at")
+
+  requestType    RequestType? @relation("MainRequest_RequestType", fields: [requestTypeId], references: [id], onDelete: SetNull)
+  fundTransfer  FormFundTransfer? @relation("Form_FundTransfer")
+  requestBy User? @relation(fields: [requestById], references: [id], onDelete: SetNull)
+
+  requestFrom Branch? @relation(fields: [requestFromId], references: [id], onDelete: SetNull)
+
+  approval      ApprovalTable[]
+  travelOrder  formTravelOrder? @relation("formTravelOrder1")
+  transmittalMemo formTransmittalMemo? @relation("formTransmittalMemo")
+  proposedBudget formProposedBudget[]
+  disburse formDisburse? @relation("formDisburse")
+  countSheet   CountSheet?   @relation("Main_CountSheet")
+
+
+  @@map("main_request")
+  @@index([requestTypeId])
+  @@index([requestById])
+  @@index([requestFromId])
+}
+
+model FormFundTransfer {
+  id Int @id @default(autoincrement())
+  mainRequestID Int? @unique @map("main_reqeust_id")
+  requestToId Int?  @map("request_to_id")
+  requestContent String @map("request_content")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updateAt   DateTime @updatedAt      @map("update_at")
+
+  mainRequest   MainRequest? @relation("Form_FundTransfer", fields: [mainRequestID], references: [id], onDelete: SetNull)
+  requestTo   User? @relation(fields: [requestToId], references: [id], onDelete: SetNull)
+
+   @@map("form_fund_transfer")
+   
+   @@index([mainRequestID])
+   @@index([requestToId])
+
+}
+
+
+model ApprovalTable {
+  id Int @id @default(autoincrement())
+  mainFormId Int? @unique @map("main_form_id")
+  notedBy Statuses @default(PENDING) @map("noted_by")
+  checkedBy Statuses @default(PENDING) @map("checked_by")
+  checkedBy2 Statuses @default(PENDING) @map("checked_by2")
+  recomApproval Statuses @default(PENDING) @map("recom_approval")
+  recomApproval2 Statuses @default(PENDING) @map("recom_approval2")
+  approveBy Statuses @default(PENDING) @map("approve_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updateAt   DateTime @updatedAt      @map("update_at")
+
+  mainRequest MainRequest? @relation(fields: [mainFormId], references: [id], onDelete: SetNull)
+  
+  requestLogs  RequestLogs[]
+  @@index([mainFormId])
+  @@map("approval_table")
+}
+
+
+
+model RequestLogs {
+  id  Int @id @default(autoincrement())
+  approvalId Int? @map("approval_id")
+  checkerType String @map("checker_type")
+  approverId Int? @map("approver_id")
+  action String
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  approval ApprovalTable? @relation(fields: [approvalId], references: [id], onDelete: SetNull)
+  approver User? @relation(fields: [approverId], references: [id], onDelete: SetNull)
+
+  @@index([approvalId])
+  @@index([approverId])
+  @@map("request_logs")
+
+
+}
+
+
+
+
+
+model formTravelOrder {
+    id Int @id @default(autoincrement())
+    name String? @db.VarChar(100)
+    position String? @db.VarChar(50)
+    departure_date DateTime @db.Date
+    current_date DateTime @db.Date
+    destination String? @db.VarChar(100)
+    purpose_of_travel String? @db.VarChar(100)
+    items Json?
+    total_amount Decimal? @db.Decimal(12,2)
+    createdAt  DateTime @default(now()) @db.Timestamptz(6)
+
+    mainFormId Int @unique @map("main_form_id")
+
+    mainForm MainRequest? @relation("formTravelOrder1", fields: [mainFormId], references: [id], onDelete: Cascade)
+
+    
+
+    @@index([mainFormId])
+    @@map("form_travel_order")
+}
+
+
+
+model formProposedBudget {
+  id              Int      @id @default(autoincrement())
+  description     String?  @db.VarChar(200)
+  budget          Decimal? @db.Decimal(10,2)
+  total_expenses  Decimal? @db.Decimal(10,2)
+  variance        Decimal? @db.Decimal(10,2)
+  proposed_budget Decimal? @db.Decimal(10,2)
+  remarks         String?  @db.VarChar(200)
+  expense_type    String?  @db.VarChar(50)
+  month_of        String?  @db.VarChar(50)
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  mainFormId Int @map("main_form_id")
+  mainForm MainRequest @relation(fields: [mainFormId], references: [id], onDelete: Cascade)
+
+  @@index([mainFormId])
+  @@map("form_proposed_budget")
+}
+
+
+model formTransmittalMemo{
+  id Int @id @default(autoincrement())
+  from String? @db.VarChar(100)
+  date DateTime @db.Date
+  description String? @db.VarChar(200)
+  note String? @db.VarChar(200)
+  items Json?
+
+  to_id Int?  @map("to_id")
+  requestTo   User? @relation(fields: [to_id], references: [id], onDelete: SetNull)
+
+  mainFormId Int @unique @map("main_form_id")
+  mainForm MainRequest? @relation("formTransmittalMemo", fields: [mainFormId], references: [id], onDelete: Cascade)
+  @@map("form_transmittal_memo")
+}
+
+model formDisburse {
+  id Int @id @default(autoincrement())
+  from String? @db.VarChar(200)
+  date DateTime @db.Date@map("date")
+  subject String? @db.VarChar(255)
+  description  String?   @db.Text         
+  note         String?   @db.Text  
+  total_amount Decimal? @db.Decimal(12,2)
+  items Json?
+  
+  to_id Int?  @map("to_id")
+  requestTo   User? @relation(fields: [to_id], references: [id], onDelete: SetNull)
+
+  mainFormId Int @unique @map("main_form_id")
+  mainForm MainRequest? @relation("formDisburse", fields: [mainFormId], references: [id], onDelete: Cascade)
+
+  @@map("form_disburse")
+}
+
+
+
+// Fund Replenishments
+
+
+
+model CountSheet {
+  id         Int     @id @default(autoincrement())
+  fundType   String  @map("fund_type")
+  mainFormId Int? @unique @map("main_form_id")
+  office     String  @map("office_name")
+  dateCount  DateTime @map("date_count")
+  fundName   String  @map("fund_name")
+  fundAmount Decimal @db.Decimal(10,2)
+  reference  String?
+  cashDemo   Json?   
+  repFund    Decimal @db.Decimal(10,2)
+  totalFund  Decimal @db.Decimal(10,2)
+  cashShort  Decimal? @db.Decimal(10,2)
+
+
+  MaincountSheet MainRequest? @relation("Main_CountSheet", fields: [mainFormId], references: [id], onDelete:Cascade)
+
+  // relations
+  CashCountSheet   CashFund[]   @relation("CashFund_CountSheet")
+  TravelCountSheet TravelFund[] @relation("TravelFund_CountSheet")
+
+  @@index([mainFormId])
+}
+
+
+
+
+// Travel and Cash funding and Cash Sheet Model
+
+model CashFund {
+  id        Int      @id @default(autoincrement())
+  countId   Int?     @map("count_sheet_id")
+  startDate DateTime @map("start_date")
+  endDate   DateTime @map("end_date")
+  reqDate   DateTime @map("req_date")
+  payee     String   @map("payee_name")
+  remarks   String?
+  fundAmount Decimal  @db.Decimal(10,2)
+  miscExp    Decimal? @db.Decimal(10,2)
+  billFee    Decimal? @db.Decimal(10,2) 
+  telFee     Decimal? @db.Decimal(10,2)
+  dueMh      Decimal? @db.Decimal(10,2)
+
+  // fk
+  CashSheet CountSheet? @relation("CashFund_CountSheet", fields: [countId], references: [id], onDelete: Cascade)
+  @@index([countId])
+}
+
+
+model TravelFund {
+  id         Int      @id @default(autoincrement())
+  countId    Int?     @map("count_sheet_id")
+  tagsField     String[] @default([])
+  startDate  DateTime @map("start_date")
+  endDate    DateTime @map("end_date")
+  reqDate    DateTime @map("req_date")
+  travelling String?  @db.VarChar(255)
+  fuel       Decimal? @db.Decimal(10,2)
+  repair     String[] @default([])
+  litigation Decimal? @db.Decimal(10,2)
+  totalFee   Decimal  @db.Decimal(10,2)
+  kilometer  String?  @map("km_value")
+  remarks    String?
+
+  // fk
+  TravelSheet CountSheet? @relation("TravelFund_CountSheet", fields: [countId], references: [id], onDelete:Cascade)
+  @@index([countId])
+}
